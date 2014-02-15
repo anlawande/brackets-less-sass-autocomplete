@@ -1,4 +1,14 @@
-brackets-less-sass-autocomplete
+Brackets less-sass auto suggest
 ===============================
 
-brackets auto suggest plugin for less and sass editing
+Brackets auto suggest plugin for less and sass editing
+
+#### Will suggest
+* variable names
+* id/class names
+* built-in functions (less only)
+
+
+
+
+##### Currently will hint only identifiers from current document
