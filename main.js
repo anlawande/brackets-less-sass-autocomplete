@@ -49,9 +49,10 @@ define(function (require, exports, module) {
         this.primaryTriggerKeys = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-()";
         this.secondaryTriggerKeys = ": ";
         this.exclusion = null;
-        this.regexDeTokenize = /[\.#](.*)$/;
-        this.regexLessAll =  /([\.#][^\s{]+)\s+{/g;
-        this.regexLessToken = /([\.#][\w\-]*)$/;
+        this.regexDeTokenize = /[\.#@](.*)$/;
+        this.regexLessClsID =  /([\.#][^\s{]+)\s+{/g;
+        this.regexLessVariable = /(@[\w\-]+)\s+:\s+(?:[^;]*?);/g;
+        this.regexLessToken = /([\.#@][\w\-]*)$/;
         this.trie = new Trie();
     }
 
@@ -107,8 +108,12 @@ define(function (require, exports, module) {
         var text = editor.document.getText();
         var result;
         var collection = [];
-        this.regexLessAll.lastIndex = 0;
-        while((result = this.regexLessAll.exec(text)) !== null) {
+        this.regexLessClsID.lastIndex = 0;
+        while((result = this.regexLessClsID.exec(text)) !== null) {
+            collection.push(result[1]);
+        }
+        this.regexLessVariable.lastIndex = 0;
+        while((result = this.regexLessVariable.exec(text)) !== null) {
             collection.push(result[1]);
         }
         this.trie.wipe();
@@ -344,7 +349,7 @@ define(function (require, exports, module) {
         var cursor = this.editor.getCursorPos();
         var thisline = this.editor.document.getLine(cursor.line);
         thisline = thisline.substr(0, cursor.ch);
-        var token = thisline.match(/([\.#][^\.#]*)$/g)[0];
+        var token = this.regexLessToken.exec(thisline)[1];
         var start = {
             line: cursor.line, 
             ch : (cursor.ch - token.length + 1)
