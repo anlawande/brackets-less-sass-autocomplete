@@ -29,98 +29,32 @@ define(function (require, exports, module) {
 
     var AppInit             = brackets.getModule("utils/AppInit"),
         CodeHintManager     = brackets.getModule("editor/CodeHintManager"),
-        CSSUtils            = brackets.getModule("language/CSSUtils"),
+        /*CSSUtils            = brackets.getModule("language/CSSUtils"),
         HTMLUtils           = brackets.getModule("language/HTMLUtils"),
         LanguageManager     = brackets.getModule("language/LanguageManager"),
-        TokenUtils          = brackets.getModule("utils/TokenUtils"),
-        CSSProperties       = require("text!CSSProperties.json"),
-        properties          = JSON.parse(CSSProperties);
+        TokenUtils          = brackets.getModule("utils/TokenUtils"),*/
+        Trie                = require("trie").Trie,
+        lessSassPropHints   = LessSassPropHints;
+        /*CSSProperties       = require("text!CSSProperties.json"),
+        properties          = JSON.parse(CSSProperties);*/
     
     // Context of the last request for hints: either CSSUtils.PROP_NAME,
     // CSSUtils.PROP_VALUE or null.
-    var lastContext;
+    // var lastContext;
     
     /**
      * @constructor
      */
-    function CssPropHints() {
+    function LessSassPropHints() {
         this.primaryTriggerKeys = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-()";
         this.secondaryTriggerKeys = ": ";
         this.exclusion = null;
+        this.regexDeTokenize = /[\.#](.*)$/;
+        this.regexLessAll =  /([\.#][^\s{]+)\s+{/g;
+        this.regexLessToken = /([\.#][\w\-]*)$/;
+        this.trie = new Trie();
     }
 
-    /**
-     * Get the CSS style text of the file open in the editor for this hinting session.
-     * For a CSS file, this is just the text of the file. For an HTML file,
-     * this will be only the text in the <style> tags.
-     *
-     * @return {string} the "css" text that can be sent to CSSUtils to extract all named flows.
-     */
-    CssPropHints.prototype.getCssStyleText = function () {
-        if (LanguageManager.getLanguageForPath(this.editor.document.file.fullPath).getId() === "html") {
-            // Collect text in all style blocks
-            var text = "",
-                styleBlocks = HTMLUtils.findBlocks(this.editor, "css");
-            
-            styleBlocks.forEach(function (styleBlock) {
-                text += styleBlock.text;
-            });
-            
-            return text;
-        } else {
-            // css file, just return the text
-            return this.editor.document.getText();
-        }
-    };
-    
-    /**
-     * Extract all the named flows from any "flow-from" or "flow-into" properties 
-     * in the current document. If we have the cached list of named flows and the 
-     * cursor is still on the same line as the cached cursor, then the cached list
-     * is returned. Otherwise, we recollect all named flows and update the cache.
-     *
-     * @return {Array.<string>} All named flows available in the current document.
-     */
-    CssPropHints.prototype.getNamedFlows = function () {
-        if (this.namedFlowsCache) {
-            // If the cursor is no longer on the same line, then the cache is stale.
-            // Delete cache so we can extract all named flows again.
-            if (this.namedFlowsCache.cursor.line !== this.cursor.line) {
-                this.namedFlowsCache = null;
-            }
-        }
-        
-        if (!this.namedFlowsCache) {
-            this.namedFlowsCache = {};
-            this.namedFlowsCache.flows = CSSUtils.extractAllNamedFlows(this.getCssStyleText());
-            this.namedFlowsCache.cursor = { line: this.cursor.line, ch: this.cursor.ch };
-        }
-        
-        return this.namedFlowsCache.flows;
-    };
-    
-    /**
-     * Check whether the exclusion is still the same as text after the cursor. 
-     * If not, reset it to null.
-     *
-     * @param {boolean} propNameOnly
-     * true to indicate that we update the exclusion only if the cursor is inside property name context.
-     * Otherwise, we also update exclusion for property value context.
-     */
-    CssPropHints.prototype.updateExclusion = function (propNameOnly) {
-        var textAfterCursor;
-        if (this.exclusion && this.info) {
-            if (this.info.context === CSSUtils.PROP_NAME) {
-                textAfterCursor = this.info.name.substr(this.info.offset);
-            } else if (!propNameOnly && this.info.context === CSSUtils.PROP_VALUE) {
-                textAfterCursor = this.info.value.substr(this.info.offset);
-            }
-            if (!CodeHintManager.hasValidExclusion(this.exclusion, textAfterCursor)) {
-                this.exclusion = null;
-            }
-        }
-    };
-    
     /**
      * Determines whether CSS propertyname or -name hints are available in the current editor
      * context.
@@ -138,8 +72,8 @@ define(function (require, exports, module) {
      * the given editor context and, in case implicitChar is non- null,
      * whether it is appropriate to do so.
      */
-    CssPropHints.prototype.hasHints = function (editor, implicitChar) {
-        this.editor = editor;
+    LessSassPropHints.prototype.hasHints = function (editor, implicitChar) {
+        /*this.editor = editor;
         var cursor = this.editor.getCursorPos(),
             textAfterCursor;
 
@@ -167,8 +101,21 @@ define(function (require, exports, module) {
             } else {
                 this.updateExclusion(true);
             }
+        }*/
+        this.editor = editor;
+        var cursor = editor.getCursorPos();
+        var text = editor.document.getText();
+        var result;
+        var collection = [];
+        this.regexLessAll.lastIndex = 0;
+        while((result = this.regexLessAll.exec(text)) !== null) {
+            collection.push(result[1]);
         }
-        
+        this.trie.wipe();
+        for(var i = 0; i < collection.length; i++) {
+            // Adding identifiers without markers against their marker counterparts
+            this.trie.add(collection[i], this.regexDeTokenize.exec(collection[i])[1]);
+        }
         return true;
     };
        
@@ -196,8 +143,8 @@ define(function (require, exports, module) {
      * 4. handleWideResults, a boolean (or undefined) that indicates whether
      *    to allow result string to stretch width of display.
      */
-    CssPropHints.prototype.getHints = function (implicitChar) {
-        this.cursor = this.editor.getCursorPos();
+    LessSassPropHints.prototype.getHints = function (implicitChar) {
+        /*this.cursor = this.editor.getCursorPos();
         this.info = CSSUtils.getInfoAtPos(this.editor, this.cursor);
 
         var needle = this.info.name,
@@ -281,7 +228,22 @@ define(function (require, exports, module) {
                 handleWideResults: false
             };
         }
-        return null;
+        return null;*/
+        var cursor = this.editor.getCursorPos();
+        var thisline = this.editor.document.getLine(cursor.line);
+        thisline = thisline.substr(0, cursor.ch);
+        var token = this.regexLessToken.exec(thisline);
+        if(token === null) {
+            return null;
+        }
+        token = token[1];
+        var hints = this.trie.lookup(token);
+        return {
+            hints : hints,
+            match : token,
+            selectInitial : true,
+            handleWideResults : false
+        }
     };
     
     /**
@@ -294,8 +256,8 @@ define(function (require, exports, module) {
      * Indicates whether the manager should follow hint insertion with an
      * additional explicit hint request.
      */
-    CssPropHints.prototype.insertHint = function (hint) {
-        var offset = this.info.offset,
+    LessSassPropHints.prototype.insertHint = function (hint) {
+        /*var offset = this.info.offset,
             cursor = this.editor.getCursorPos(),
             start = {line: -1, ch: -1},
             end = {line: -1, ch: -1},
@@ -378,16 +340,30 @@ define(function (require, exports, module) {
         
         if (adjustCursor) {
             this.editor.setCursorPos(newCursor);
+        }*/
+        var cursor = this.editor.getCursorPos();
+        var thisline = this.editor.document.getLine(cursor.line);
+        thisline = thisline.substr(0, cursor.ch);
+        var token = thisline.match(/([\.#][^\.#]*)$/g)[0];
+        var start = {
+            line: cursor.line, 
+            ch : (cursor.ch - token.length + 1)
+        };
+        var end = {
+            line : cursor.line,
+            ch : cursor.ch
         }
+        this.editor._codeMirror.replaceRange(hint, start, end);
         
-        return keepHints;
+        // Don't want to keep hints open
+        return false;       
     };
     
     AppInit.appReady(function () {
-        var cssPropHints = new CssPropHints();
-        // CodeHintManager.registerHintProvider(cssPropHints, ["css", "scss", "less"], 0);
-        
+        var LessSassPropHintsVar = new lessSassPropHints();
+        CodeHintManager.registerHintProvider(LessSassPropHintsVar, ["less"], 0);
+
         // For unit testing
-        exports.cssPropHintProvider = cssPropHints;
+        exports.lessSassPropHintsProvider = LessSassPropHints;
     });
 });
